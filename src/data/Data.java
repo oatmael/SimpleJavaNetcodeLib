@@ -5,10 +5,30 @@
  */
 package data;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+
 /**
  *
  * @author jaron
  */
-public class Data {
+public class Data extends ArrayList<Object>{
+    private String senderID = null;
     
+    public Data(String id, Object... o){
+        this.add(0, id);
+        this.addAll(Arrays.asList(o));
+    }
+    
+    public String id(){
+        return (String) this.get(0);
+    }
+    
+    public String getSenderID() {
+        return this.senderID;
+    }
+    
+    public void sign(String senderID) {
+        this.senderID = senderID;
+    }
 }

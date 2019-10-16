@@ -5,10 +5,12 @@
  */
 package data;
 
+import java.net.Socket;
+
 /**
- *
+ * Interface for creating responses to events
  * @author jaron
  */
 public interface Response {
-    
+    public abstract void run(Data data, Socket socket);
 }
