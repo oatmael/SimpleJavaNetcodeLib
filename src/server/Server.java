@@ -32,16 +32,35 @@ public abstract class Server {
         this.pingInterval = seconds * 1000;
     }
     
-    public Server(int port, boolean keepConnectionAlive){
+    public Server(int port, boolean keepConnectionAlive, ClientData ch){
         this.connectedClients = new ArrayList<>();
         this.port = port;
         
         responses.put("REGISTER_CLIENT", new Response(){
             @Override
             public void run(Data data, Socket socket) {
-                connectedClients.add(new RemoteClient((String) data.get(0), socket));
+                connectedClients.add(new RemoteClient((String) data.get(1), socket, ch));
+                // This code is kinda awful but I can't think of a better
+                // solution rn so I'll leave it as is
+                for (RemoteClient c : connectedClients){
+                    if (c.getId().equalsIgnoreCase((String) data.get(1))){
+                        c.getHandler().setClientID((String) data.get(1));
+                    }
+                }
                 onClientRegistered(data, socket);
             }
+        });
+        
+        responses.put("PONG", new Response(){
+           @Override
+           public void run(Data data, Socket socket) {
+               long ping = Math.abs(lastPingTime - (long) data.get(1)) / 1000000;
+               for (RemoteClient c : connectedClients){
+                   if (c.getId().equalsIgnoreCase(data.getSenderID())){
+                       c.getHandler().updatePing(ping);
+                   }
+               }
+           }
         });
         
         registerResponses();
@@ -49,6 +68,10 @@ public abstract class Server {
         
         if (keepConnectionAlive)
             startPingThread();
+    }
+    
+    public Server(int port, boolean keepConnectionAlive){
+        this(port, keepConnectionAlive, new ClientData());
     }
     
     public abstract void registerResponses();
@@ -145,6 +168,8 @@ public abstract class Server {
         }
     }
     
+    protected long lastPingTime;
+    
     private void startPingThread() {
         new Thread(new Runnable(){
             @Override
@@ -153,7 +178,18 @@ public abstract class Server {
                     try {
                         Thread.sleep(pingInterval);
                     } catch (InterruptedException ex) {  }
-                    broadcastMessage(new Data("PING", "pong?"));
+                    lastPingTime = System.nanoTime();
+                    if (connectedClients != null){
+                        ArrayList<ClientData> currentClients = new ArrayList<>();
+                        for (RemoteClient c : connectedClients){
+                            currentClients.add(c.getHandler());
+                        }
+                        broadcastMessage(new Data("PING", lastPingTime, currentClients));
+                        onPing();
+                    } else {
+                        broadcastMessage(new Data("PING", lastPingTime));
+                        onPing();
+                    }
                 }
             }
         }).start();
@@ -181,12 +217,17 @@ public abstract class Server {
         }
     }
     
+    public synchronized void sendReply(Socket toSocket, String replyID, Object... datapackageContent) {
+        sendMessage(new RemoteClient(null, toSocket, null), new Data(replyID, datapackageContent));
+    }
+    
     public synchronized int broadcastMessage(Data data){
         int received = 0;
         for (RemoteClient client : connectedClients){
             sendMessage(client, data);
             received++;
         }
+        
         if(clientCleanupQueue != null) {
             received -= clientCleanupQueue.size();
         
@@ -238,6 +279,10 @@ public abstract class Server {
     }
     
     public void onServerStopped(){
+        
+    }
+    
+    public void onPing(){
         
     }
     

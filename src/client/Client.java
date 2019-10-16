@@ -6,6 +6,7 @@
 package client;
 
 import data.*;
+import server.*;
 
 import java.io.*;
 import java.net.*;
@@ -26,17 +27,47 @@ public class Client {
     protected int timeout;
     
     protected Thread listener;
+    protected LocalClientData localClientData;
     
     protected int errors;
     protected boolean stopped;
     
     public static final String DEFAULT_USER_ID = UUID.randomUUID().toString();
     
-    public Client(String hostname, int port, int timeout, String id){
+    public Client(String hostname, int port, int timeout, String id, LocalClientData localClientData){
         this.address = new InetSocketAddress(hostname, port);
         this.timeout = timeout;
         this.id = id;
         this.errors = 0;
+        this.localClientData = localClientData;
+        
+        registerDefaultResponses();
+    }
+    
+    public Client(String hostname, int port, int timeout, String id){
+        this(hostname, port, timeout, id, new LocalClientData());
+    }
+    
+    protected void registerDefaultResponses(){
+        responses.put("PING", new Response(){
+            @Override
+            public void run(Data data, Socket socket) {
+                if (data.size() > 2) { 
+                    localClientData.setConnectedClientInfo((ArrayList<ClientData>) data.get(2));
+                    for (ClientData cd : localClientData.getConnectedClientInfo()){
+                        if (cd.getClientID().equalsIgnoreCase(id)) {
+                            localClientData.updatePing(cd.getPing());
+                        }
+                    }
+                }
+                //localClientData.updatePing((long) data.get(1));
+                onClientDataUpdate();
+                
+                Data response = new Data("PONG", System.nanoTime());
+                response.sign(id);
+                sendMessage(response, timeout, false);
+            }
+        });
     }
     
     public void start(){
@@ -167,7 +198,7 @@ public class Client {
         listener.start();
     }
     
-    public Data sendMessage(Data data, int timeout){
+    public Data sendMessage(Data data, int timeout, boolean expectResponse){
         
         try {
             Socket readSocket = new Socket();
@@ -179,17 +210,26 @@ public class Client {
             out.writeObject(data);
             out.flush();
             
-            ObjectInputStream in = new ObjectInputStream(
-                new BufferedInputStream(readSocket.getInputStream()));
-            Object response = in.readObject();
+            if (expectResponse){
+                ObjectInputStream in = new ObjectInputStream(
+                    new BufferedInputStream(readSocket.getInputStream()));
+                Object response = in.readObject();
+                in.close();
+                
+                out.close();
+            
+                readSocket.close();
+                
+                if (response instanceof Data){
+                    return (Data) response;
+                }
+            }
             
             out.close();
-            in.close();
+            
             readSocket.close();
             
-            if (response instanceof Data){
-                return (Data) response;
-            }
+            
         } catch (EOFException e) {
             logError("[Client] EOFException: did not receive response from server?");
         } catch (IOException | ClassNotFoundException e) {
@@ -197,6 +237,10 @@ public class Client {
         }
         
         return null;
+    }
+    
+    public Data sendMessage(Data data, int timeout){
+        return sendMessage(data, timeout, true);
     }
     
     public void registerResponse(String identifier, Response response){
@@ -230,6 +274,8 @@ public class Client {
         System.err.println(message);
     }
     
+    //Overrides
+    
     public void onReconnect(){
         
     }
@@ -237,6 +283,9 @@ public class Client {
         
     }
     public void onConnectionGood(){
+        
+    }
+    public void onClientDataUpdate() {
         
     }
 }

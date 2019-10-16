@@ -14,10 +14,12 @@ import java.net.Socket;
 public class RemoteClient {
     private String id;
     private Socket socket;
+    private ClientData handler;
     
-    public RemoteClient(String id, Socket socket){
+    public RemoteClient(String id, Socket socket, ClientData handler){
         this.id = id;
         this.socket = socket;
+        this.handler = handler;
     }
 
     public String getId() {
@@ -26,6 +28,10 @@ public class RemoteClient {
 
     public Socket getSocket() {
         return socket;
+    }
+    
+    public ClientData getHandler(){
+        return handler;
     }
     
     @Override
