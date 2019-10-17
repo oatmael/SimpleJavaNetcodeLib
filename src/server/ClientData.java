@@ -11,21 +11,11 @@ import java.io.Serializable;
  *
  * @author jaron
  */
-public class ClientData implements Serializable {
-    private String clientID;
-    private long ping;
+public interface ClientData extends Serializable {
     
-    public String getClientID() {
-        return clientID;
-    }
-    public void setClientID(String clientID) {
-        this.clientID = clientID;
-    }
+    public String getClientID();
+    public void setClientID(String clientID);
     
-    public long getPing(){
-        return ping;
-    }
-    public void updatePing(long newPing){
-        ping = newPing;
-    }
+    public long getPing();
+    public void updatePing(long newPing);
 }

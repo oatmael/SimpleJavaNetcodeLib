@@ -70,10 +70,6 @@ public abstract class Server {
             startPingThread();
     }
     
-    public Server(int port, boolean keepConnectionAlive){
-        this(port, keepConnectionAlive, new ClientData());
-    }
-    
     public abstract void registerResponses();
     
     public void registerResponse(String identifier, Response response){

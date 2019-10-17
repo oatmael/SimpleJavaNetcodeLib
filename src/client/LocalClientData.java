@@ -12,21 +12,10 @@ import server.ClientData;
  *
  * @author jaron
  */
-public class LocalClientData {
-    private long ping;
-    private ArrayList<ClientData> connectedClientInfo;
-
-    public ArrayList<ClientData> getConnectedClientInfo() {
-        return connectedClientInfo;
-    }
-    public void setConnectedClientInfo(ArrayList<ClientData> connectedClientInfo) {
-        this.connectedClientInfo = connectedClientInfo;
-    }
+public interface LocalClientData {
+    public ArrayList<ClientData> getConnectedClientInfo();
+    public void setConnectedClientInfo(ArrayList<ClientData> connectedClientInfo);
     
-    public long getPing(){
-        return ping;
-    }
-    public void updatePing(long newPing){
-        ping = newPing;
-    }
+    public long getPing();
+    public void updatePing(long newPing);
 }

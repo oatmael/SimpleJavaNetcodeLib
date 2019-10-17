@@ -44,10 +44,6 @@ public class Client {
         registerDefaultResponses();
     }
     
-    public Client(String hostname, int port, int timeout, String id){
-        this(hostname, port, timeout, id, new LocalClientData());
-    }
-    
     protected void registerDefaultResponses(){
         responses.put("PING", new Response(){
             @Override
