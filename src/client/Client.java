@@ -240,6 +240,9 @@ public class Client {
     }
     
     public void registerResponse(String identifier, Response response){
+        if (identifier.equalsIgnoreCase("PING"))
+            throw new IllegalArgumentException("Identifier can not be 'PING'.");
+        
         responses.put(identifier, response);
     }
     

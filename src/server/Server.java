@@ -25,6 +25,7 @@ public abstract class Server {
     
     protected Thread listener;
     
+    protected boolean keepConnectionAlive;
     protected boolean stopped;
     protected int pingInterval = 15 * 1000;
     
@@ -35,7 +36,19 @@ public abstract class Server {
     public Server(int port, boolean keepConnectionAlive, ClientData ch){
         this.connectedClients = new ArrayList<>();
         this.port = port;
+        this.keepConnectionAlive = keepConnectionAlive;
         
+        registerDefaultResponses(ch);
+        registerResponses();
+        start();
+        
+        if (keepConnectionAlive)
+            startPingThread();
+    }
+    
+    public abstract void registerResponses();
+    
+    protected void registerDefaultResponses(ClientData ch){
         responses.put("REGISTER_CLIENT", new Response(){
             @Override
             public void run(Data data, Socket socket) {
@@ -51,30 +64,25 @@ public abstract class Server {
             }
         });
         
-        responses.put("PONG", new Response(){
-           @Override
-           public void run(Data data, Socket socket) {
-               long ping = Math.abs(lastPingTime - (long) data.get(1)) / 1000000;
-               for (RemoteClient c : connectedClients){
-                   if (c.getId().equalsIgnoreCase(data.getSenderID())){
-                       c.getHandler().updatePing(ping);
-                   }
-               }
-           }
-        });
-        
-        registerResponses();
-        start();
-        
         if (keepConnectionAlive)
-            startPingThread();
+            responses.put("PONG", new Response(){
+                @Override
+                public void run(Data data, Socket socket) {
+                    long ping = Math.abs(lastPingTime - (long) data.get(1)) / 1000000;
+                    for (RemoteClient c : connectedClients){
+                        if (c.getId().equalsIgnoreCase(data.getSenderID())){
+                            c.getHandler().updatePing(ping);
+                        }
+                    }
+                }
+            });
     }
-    
-    public abstract void registerResponses();
     
     public void registerResponse(String identifier, Response response){
         if (identifier.equalsIgnoreCase("REGISTER_CLIENT"))
             throw new IllegalArgumentException("Identifier can not be 'REGISTER_CLIENT'.");
+        if (identifier.equalsIgnoreCase("PONG") && keepConnectionAlive)
+            throw new IllegalArgumentException("Identifier can not be 'PONG'.");
         
         responses.put(identifier, response);
     }
@@ -82,37 +90,38 @@ public abstract class Server {
     protected void startListener(){
         if (listener == null && server != null){
             listener = new Thread(new Runnable() {
-               @Override
-               public void run(){
-                   while (!Thread.interrupted() && !stopped && server != null){
-                       try {
+                @Override
+                public void run(){
+                    while (!Thread.interrupted() && !stopped && server != null){
+                        try {
 
-                           Socket clientSocket = server.accept();
+                            Socket clientSocket = server.accept();
                            
-                           ObjectInputStream in = new ObjectInputStream(
+                            ObjectInputStream in = new ObjectInputStream(
                                 new BufferedInputStream(clientSocket.getInputStream()));
-                           Object data = in.readObject();
+                            Object data = in.readObject();
                            
-                           if (data instanceof Data){
-                               Data message = (Data) data;
+                            if (data instanceof Data){
+                                Data message = (Data) data;
                                
-                               for (String s : responses.keySet()){
-                                   if (message.id().equalsIgnoreCase(s)) {
-                                       log("[Server] Responding to client request " + message.id());
-                                       startRequestHandler(s, message, clientSocket);
-                                       break;
-                                   }
-                               }
-                           }
+                                for (String s : responses.keySet()){
+                                    if (message.id().equalsIgnoreCase(s)) {
+                                        // avoiding the log being spammed with ping requests
+                                        if (!message.id().equalsIgnoreCase("PING"))
+                                            log("[Server] Responding to client request " + message.id());
+                                        startRequestHandler(s, message, clientSocket);
+                                        break;
+                                    }
+                                }
+                            }
+                        } catch (SocketException e) {
+                            logError("Server stopped: " + e.getMessage());
+                            onServerStopped();
+                        } catch (IOException | ClassNotFoundException e) {
                            
-                       } catch (SocketException e) {
-                           logError("Server stopped: " + e.getMessage());
-                           onServerStopped();
-                       } catch (IOException | ClassNotFoundException e) {
-                           
-                       } 
-                   }
-               }
+                        } 
+                    }    
+                }
             });
             listener.start();
         }
