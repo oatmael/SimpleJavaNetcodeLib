@@ -12,12 +12,14 @@ import java.io.*;
 import java.net.*;
 import java.nio.channels.AlreadyConnectedException;
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
  * @author jaron
  */
-public class Client {
+public abstract class Client {
     
     protected HashMap<String, Response> responses = new HashMap<>();
     
@@ -95,6 +97,7 @@ public class Client {
     }
     
     
+    public abstract void registerResponses();
     
     protected void registerDefaultResponses(){
         responses.put("PING", new Response(){
@@ -126,6 +129,9 @@ public class Client {
     
     public void stop(){
         stopped = true;
+        try {
+            logout();
+        } catch (IOException ex) {  }
         log("[Client] Stopping...");
     }
     
@@ -184,6 +190,14 @@ public class Client {
         }
     }
     
+    protected void logout() throws IOException {
+        log("[Client] Disconnecting from " + address + "...");
+        Data message = new Data("LOGOUT", id);
+        message.sign(id);
+        sendMessage(message, 100, false);
+        socket.close();
+    }
+    
     protected void startListener(){
         
         if (listener != null && listener.isAlive()){
@@ -196,7 +210,7 @@ public class Client {
                 while (!stopped) {
                     try {
                         if (socket != null && !socket.isConnected()) {
-                            while (!socket.isConnected()){
+                            while (!socket.isConnected() && !stopped){
                                 repairConnection();
                                 if (socket.isConnected()){
                                     break;
@@ -231,9 +245,11 @@ public class Client {
                             }
                         }
                     } catch (SocketException e) {
-                        onConnectionProblem();
-                        logError("[Client] Connection lost.");
-                        repairConnection();
+                        if (!stopped) {
+                            logError("[Client] Connection lost.");
+                            onConnectionProblem();
+                            repairConnection();
+                        }
                     } catch (ClassNotFoundException | IOException | InterruptedException e) {
                         onConnectionProblem();
                         logError("[Client] Connection was interrupted: " + e.getMessage());

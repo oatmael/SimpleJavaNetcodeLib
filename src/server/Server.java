@@ -62,6 +62,7 @@ public abstract class Server {
     
     public Server(int port, boolean keepConnectionAlive, IClientData cd){
         this.connectedClients = new ArrayList<>();
+        this.clientCleanupQueue = new ArrayList<>();
         this.port = port;
         this.keepConnectionAlive = keepConnectionAlive;
         
@@ -93,15 +94,29 @@ public abstract class Server {
         responses.put("REGISTER_CLIENT", new Response(){
             @Override
             public void run(Data data, Socket socket) {
-                connectedClients.add(new RemoteClient((String) data.get(1), socket, cd));
+                connectedClients.add(new RemoteClient((String) data.getSenderID(), socket, cd));
                 // This code is kinda awful but I can't think of a better
                 // solution rn so I'll leave it as is
                 for (RemoteClient c : connectedClients){
-                    if (c.getId().equalsIgnoreCase((String) data.get(1))){
-                        c.getHandler().setClientID((String) data.get(1));
+                    if (c.getId().equalsIgnoreCase((String) data.getSenderID())){
+                        c.getHandler().setClientID((String) data.getSenderID());
                     }
                 }
                 onClientRegistered(data, socket);
+            }
+        });
+        
+        responses.put("LOGOUT", new Response(){
+            @Override
+            public void run(Data data, Socket socket) {
+                for (RemoteClient c : connectedClients){
+                    if (c.getId().equalsIgnoreCase((String) data.getSenderID())){
+                        log("[Server] Logging out client " + c.getId());
+                        clientCleanupQueue.add(c);
+                        onClientLogout();
+                    }
+                }
+                cleanupClients();
             }
         });
         
@@ -225,7 +240,7 @@ public abstract class Server {
                         Thread.sleep(pingInterval);
                     } catch (InterruptedException ex) {  }
                     lastPingTime = System.nanoTime();
-                    if (connectedClients != null){
+                    if (connectedClients.size() > 1){
                         ArrayList<IClientData> currentClients = new ArrayList<>();
                         for (RemoteClient c : connectedClients){
                             currentClients.add(c.getHandler());
@@ -253,13 +268,7 @@ public abstract class Server {
             
         } catch (IOException e) {
             logError("Error sending message: " + e.getMessage());
-            
-            if (clientCleanupQueue != null) {
-                clientCleanupQueue.add(client);
-            } else {
-                connectedClients.remove(client);
-                onClientRemoved(client);
-            }
+            clientCleanupQueue.add(client);
         }
     }
     
@@ -274,16 +283,22 @@ public abstract class Server {
             received++;
         }
         
-        if(clientCleanupQueue != null) {
+        if(clientCleanupQueue.size() > 0) {
             received -= clientCleanupQueue.size();
+            cleanupClients();
+        }
         
+        return received;
+    }
+    
+    public synchronized void cleanupClients(){
+        log("[Server] Cleaning up clients...");
+        if (connectedClients.size() > 0 && clientCleanupQueue != null)
             for (RemoteClient client : clientCleanupQueue){
                 connectedClients.remove(client);
                 onClientRemoved(client);
             }
-        }
-        
-        return received;
+            clientCleanupQueue.clear();
     }
     
     public synchronized int numConnectedClients() {
@@ -329,6 +344,10 @@ public abstract class Server {
     }
     
     public void onPing(){
+        
+    }
+    
+    public void onClientLogout(){
         
     }
     
