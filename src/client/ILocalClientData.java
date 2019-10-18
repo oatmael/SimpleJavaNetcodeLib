@@ -6,15 +6,15 @@
 package client;
 
 import java.util.*;
-import server.ClientData;
+import server.IClientData;
 
 /**
  *
  * @author jaron
  */
-public interface LocalClientData {
-    public ArrayList<ClientData> getConnectedClientInfo();
-    public void setConnectedClientInfo(ArrayList<ClientData> connectedClientInfo);
+public interface ILocalClientData {
+    public ArrayList<IClientData> getConnectedClientInfo();
+    public void setConnectedClientInfo(ArrayList<IClientData> connectedClientInfo);
     
     public long getPing();
     public void updatePing(long newPing);

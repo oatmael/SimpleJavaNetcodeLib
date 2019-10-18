@@ -14,9 +14,9 @@ import java.net.Socket;
 public class RemoteClient {
     private String id;
     private Socket socket;
-    private ClientData handler;
+    private IClientData handler;
     
-    public RemoteClient(String id, Socket socket, ClientData handler){
+    public RemoteClient(String id, Socket socket, IClientData handler){
         this.id = id;
         this.socket = socket;
         this.handler = handler;
@@ -30,7 +30,7 @@ public class RemoteClient {
         return socket;
     }
     
-    public ClientData getHandler(){
+    public IClientData getHandler(){
         return handler;
     }
     

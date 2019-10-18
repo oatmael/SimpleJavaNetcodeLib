@@ -11,7 +11,7 @@ import java.io.Serializable;
  *
  * @author jaron
  */
-public interface ClientData extends Serializable {
+public interface IClientData extends Serializable {
     
     public String getClientID();
     public void setClientID(String clientID);

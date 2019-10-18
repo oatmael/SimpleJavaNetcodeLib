@@ -33,12 +33,39 @@ public abstract class Server {
         this.pingInterval = seconds * 1000;
     }
     
-    public Server(int port, boolean keepConnectionAlive, ClientData ch){
+    public static final boolean DEFAULT_KEEP_ALIVE = true;
+    
+    private static class DefaultClientDataImpl implements IClientData {
+        private String clientID;
+        private long ping;
+        
+        @Override
+        public String getClientID() {
+            return clientID;
+        }
+        @Override
+        public void setClientID(String clientID) {
+            this.clientID = clientID;
+        }
+
+        @Override
+        public long getPing() {
+            return ping;
+        }
+        @Override
+        public void updatePing(long newPing) {
+            this.ping = newPing;
+        }    
+    }
+
+    // Constructors
+    
+    public Server(int port, boolean keepConnectionAlive, IClientData cd){
         this.connectedClients = new ArrayList<>();
         this.port = port;
         this.keepConnectionAlive = keepConnectionAlive;
         
-        registerDefaultResponses(ch);
+        registerDefaultResponses(cd);
         registerResponses();
         start();
         
@@ -46,13 +73,27 @@ public abstract class Server {
             startPingThread();
     }
     
+    public Server(int port, IClientData cd){
+        this(port, DEFAULT_KEEP_ALIVE, cd);
+    }
+    
+    public Server(int port, boolean keepConnectionAlive){
+        this(port, keepConnectionAlive, new DefaultClientDataImpl());
+    }
+    
+    public Server(int port){
+        this(port, DEFAULT_KEEP_ALIVE, new DefaultClientDataImpl());
+    }
+    
+    
+    
     public abstract void registerResponses();
     
-    protected void registerDefaultResponses(ClientData ch){
+    protected void registerDefaultResponses(IClientData cd){
         responses.put("REGISTER_CLIENT", new Response(){
             @Override
             public void run(Data data, Socket socket) {
-                connectedClients.add(new RemoteClient((String) data.get(1), socket, ch));
+                connectedClients.add(new RemoteClient((String) data.get(1), socket, cd));
                 // This code is kinda awful but I can't think of a better
                 // solution rn so I'll leave it as is
                 for (RemoteClient c : connectedClients){
@@ -107,8 +148,8 @@ public abstract class Server {
                                 for (String s : responses.keySet()){
                                     if (message.id().equalsIgnoreCase(s)) {
                                         // avoiding the log being spammed with ping requests
-                                        if (!message.id().equalsIgnoreCase("PING"))
-                                            log("[Server] Responding to client request " + message.id());
+                                        if (!message.id().equalsIgnoreCase("PONG"))
+                                            log("[Server] Responding to client " + message.getSenderID() + " request " + message.id());
                                         startRequestHandler(s, message, clientSocket);
                                         break;
                                     }
@@ -185,7 +226,7 @@ public abstract class Server {
                     } catch (InterruptedException ex) {  }
                     lastPingTime = System.nanoTime();
                     if (connectedClients != null){
-                        ArrayList<ClientData> currentClients = new ArrayList<>();
+                        ArrayList<IClientData> currentClients = new ArrayList<>();
                         for (RemoteClient c : connectedClients){
                             currentClients.add(c.getHandler());
                         }

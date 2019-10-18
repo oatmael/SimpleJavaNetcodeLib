@@ -27,14 +27,40 @@ public class Client {
     protected int timeout;
     
     protected Thread listener;
-    protected LocalClientData localClientData;
+    protected ILocalClientData localClientData;
     
     protected int errors;
     protected boolean stopped;
     
     public static final String DEFAULT_USER_ID = UUID.randomUUID().toString();
+    public static final int DEFAULT_TIMEOUT = 30000;
     
-    public Client(String hostname, int port, int timeout, String id, LocalClientData localClientData){
+    private static class DefaultLocalClientDataImpl implements ILocalClientData {
+        private ArrayList<IClientData> connectedClientInfo;
+        private long ping;
+        
+        @Override
+        public ArrayList<IClientData> getConnectedClientInfo() {
+            return connectedClientInfo;
+        }
+        @Override
+        public void setConnectedClientInfo(ArrayList<IClientData> connectedClientInfo) {
+            this.connectedClientInfo = connectedClientInfo;
+        }
+
+        @Override
+        public long getPing() {
+            return ping;
+        }
+        @Override
+        public void updatePing(long newPing) {
+            this.ping = newPing;
+        }    
+    }
+    
+    // Constructors
+    
+    public Client(String hostname, int port, int timeout, String id, ILocalClientData localClientData){
         this.address = new InetSocketAddress(hostname, port);
         this.timeout = timeout;
         this.id = id;
@@ -44,13 +70,39 @@ public class Client {
         registerDefaultResponses();
     }
     
+    public Client(String hostname, int port, int timeout, String id) {
+        this(hostname, port, timeout, id, new DefaultLocalClientDataImpl());
+    }
+    
+    public Client(String hostname, int port, int timeout) {
+        this(hostname, port, timeout, DEFAULT_USER_ID, new DefaultLocalClientDataImpl());
+    }
+    
+    public Client(String hostname, int port, int timeout, ILocalClientData localClientData) {
+        this(hostname, port, timeout, DEFAULT_USER_ID, localClientData);
+    }
+    
+    public Client(String hostname, int port, String id, ILocalClientData localClientData) {
+        this(hostname, port, DEFAULT_TIMEOUT, id, localClientData);
+    }
+    
+    public Client(String hostname, int port, ILocalClientData localClientData) {
+        this(hostname, port, DEFAULT_TIMEOUT, DEFAULT_USER_ID, localClientData);
+    }
+    
+    public Client(String hostname, int port) {
+        this(hostname, port, DEFAULT_TIMEOUT, DEFAULT_USER_ID, new DefaultLocalClientDataImpl());
+    }
+    
+    
+    
     protected void registerDefaultResponses(){
         responses.put("PING", new Response(){
             @Override
             public void run(Data data, Socket socket) {
                 if (data.size() > 2) { 
-                    localClientData.setConnectedClientInfo((ArrayList<ClientData>) data.get(2));
-                    for (ClientData cd : localClientData.getConnectedClientInfo()){
+                    localClientData.setConnectedClientInfo((ArrayList<IClientData>) data.get(2));
+                    for (IClientData cd : localClientData.getConnectedClientInfo()){
                         if (cd.getClientID().equalsIgnoreCase(id)) {
                             localClientData.updatePing(cd.getPing());
                         }
@@ -79,6 +131,7 @@ public class Client {
     
     protected void repairConnection(){
         errors++;
+        timeout += 1000;
         log("[Client] Attempting to repair connection...");
         if (socket != null) {
             try {
