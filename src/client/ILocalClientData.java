@@ -1,8 +1,4 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
+
 package client;
 
 import java.util.*;
@@ -13,9 +9,28 @@ import server.IClientData;
  * @author jaron
  */
 public interface ILocalClientData {
+
+    /**
+     * Getter for the ArrayList of the ClientData implementation
+     * @return The ArrayList of the ClientData implementation
+     */
     public ArrayList<IClientData> getConnectedClientInfo();
+
+    /**
+     * Setter for the ArrayList of the ClientData implementation
+     * @param connectedClientInfo The new connectedClientInfo
+     */
     public void setConnectedClientInfo(ArrayList<IClientData> connectedClientInfo);
     
+    /**
+     * Getter for the ping
+     * @return the ping
+     */
     public long getPing();
-    public void updatePing(long newPing);
+
+    /**
+     * Setter for the ping
+     * @param ping The new ping
+     */
+    public void setPing(long ping);
 }

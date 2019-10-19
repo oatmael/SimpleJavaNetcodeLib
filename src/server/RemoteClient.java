@@ -1,8 +1,4 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
+
 package server;
 
 import java.net.Socket;
@@ -14,24 +10,42 @@ import java.net.Socket;
 public class RemoteClient {
     private String id;
     private Socket socket;
-    private IClientData handler;
+    private IClientData clientData;
     
-    public RemoteClient(String id, Socket socket, IClientData handler){
+    /**
+     * Constructor for the RemoteClient object
+     * @param id The client id
+     * @param socket The client's socket
+     * @param clientData The IClientData implementation
+     */
+    public RemoteClient(String id, Socket socket, IClientData clientData){
         this.id = id;
         this.socket = socket;
-        this.handler = handler;
+        this.clientData = clientData;
     }
 
+    /**
+     * Getter for the ID
+     * @return The ID
+     */
     public String getId() {
         return id;
     }
 
+    /**
+     * Getter for the client socket
+     * @return The client socket
+     */
     public Socket getSocket() {
         return socket;
     }
     
-    public IClientData getHandler(){
-        return handler;
+    /**
+     * Getter for the ClientData implementation
+     * @return
+     */
+    public IClientData getClientData(){
+        return clientData;
     }
     
     @Override

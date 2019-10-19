@@ -1,8 +1,4 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
+
 package server;
 
 import java.io.Serializable;
@@ -13,9 +9,27 @@ import java.io.Serializable;
  */
 public interface IClientData extends Serializable {
     
+    /**
+     * Getter for the clientID
+     * @return the clientID
+     */
     public String getClientID();
+
+    /**
+     * Setter for the clientID
+     * @param clientID The new clientID
+     */
     public void setClientID(String clientID);
     
+    /**
+     * Getter for the ping
+     * @return The ping
+     */
     public long getPing();
-    public void updatePing(long newPing);
+
+    /**
+     * Setter for the ping
+     * @param ping The new ping
+     */
+    public void setPing(long ping);
 }
