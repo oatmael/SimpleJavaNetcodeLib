@@ -19,6 +19,11 @@ public abstract class Client {
     protected HashMap<String, Response> responses = new HashMap<>();
     
     protected String id;
+
+    public String getId() {
+        return id;
+    }
+    
     protected Socket socket;
     protected InetSocketAddress address;
 
@@ -36,6 +41,7 @@ public abstract class Client {
     private static class DefaultLocalClientDataImpl implements ILocalClientData {
         private ArrayList<IClientData> connectedClientInfo;
         private long ping;
+        private ArrayList<String> clientTags;
         
         @Override
         public ArrayList<IClientData> getConnectedClientInfo() {
@@ -54,6 +60,16 @@ public abstract class Client {
         public void setPing(long ping) {
             this.ping = ping;
         }    
+
+        @Override
+        public ArrayList<String> getClientTags() {
+            return clientTags;
+        }
+
+        @Override
+        public void setClientTags(ArrayList<String> clientTags) {
+            this.clientTags = clientTags;
+        }
     }
     
     // Constructors
@@ -75,6 +91,7 @@ public abstract class Client {
         this.localClientData = localClientData;
         
         registerDefaultResponses();
+        registerResponses();
     }
     
     /**
@@ -344,24 +361,24 @@ public abstract class Client {
     public Data sendMessage(Data data, int timeout, boolean expectResponse){
         
         try {
-            Socket readSocket = new Socket();
-            readSocket.connect(address);
+            Socket writeSocket = new Socket();
+            writeSocket.connect(address, timeout);
             
             ObjectOutputStream out = new ObjectOutputStream(
-                new BufferedOutputStream(readSocket.getOutputStream()));
+                new BufferedOutputStream(writeSocket.getOutputStream()));
             data.sign(id);
             out.writeObject(data);
             out.flush();
             
             if (expectResponse){
                 ObjectInputStream in = new ObjectInputStream(
-                    new BufferedInputStream(readSocket.getInputStream()));
+                    new BufferedInputStream(writeSocket.getInputStream()));
                 Object response = in.readObject();
                 in.close();
                 
                 out.close();
             
-                readSocket.close();
+                writeSocket.close();
                 
                 if (response instanceof Data){
                     return (Data) response;
@@ -370,7 +387,7 @@ public abstract class Client {
             
             out.close();
             
-            readSocket.close();
+            writeSocket.close();
             
             
         } catch (EOFException e) {

@@ -33,4 +33,16 @@ public interface ILocalClientData {
      * @param ping The new ping
      */
     public void setPing(long ping);
+    
+    /**
+     * Getter for the ArrayList of tags
+     * @return The ArrayList of tags
+     */
+    public ArrayList<String> getClientTags();
+    
+    /**
+     * Setter for the ArrayList of tags
+     * @param clientTags The ArrayList of tags
+     */
+    public void setClientTags(ArrayList<String> clientTags);
 }

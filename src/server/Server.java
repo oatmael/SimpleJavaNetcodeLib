@@ -22,6 +22,7 @@ public abstract class Server {
     
     protected Thread listener;
     protected boolean keepConnectionAlive;
+    protected boolean logResponses;
     protected boolean stopped;
     protected int pingInterval = 15 * 1000;
     
@@ -35,29 +36,9 @@ public abstract class Server {
     }
     
     public static final boolean DEFAULT_KEEP_ALIVE = true;
+    public static final boolean DEFAULT_LOG_RESPONSES = true;
     
-    private static class DefaultClientDataImpl implements IClientData {
-        private String clientID;
-        private long ping;
-        
-        @Override
-        public String getClientID() {
-            return clientID;
-        }
-        @Override
-        public void setClientID(String clientID) {
-            this.clientID = clientID;
-        }
-
-        @Override
-        public long getPing() {
-            return ping;
-        }
-        @Override
-        public void setPing(long ping) {
-            this.ping = ping;
-        }    
-    }
+    
 
     // Constructors
 
@@ -65,20 +46,38 @@ public abstract class Server {
      * All-args constructor for a Server object.
      * @param port The port to run the server on
      * @param keepConnectionAlive Flag for sending periodic pings to connected clients
+     * @param logResponses Flag for logging client repsonses
      * @param cd The implementation for data kept on the Server
      */  
-    public Server(int port, boolean keepConnectionAlive, IClientData cd){
+    public Server(int port, boolean keepConnectionAlive, boolean logResponses, Class cd){
         this.connectedClients = new ArrayList<>();
         this.clientCleanupQueue = new ArrayList<>();
         this.port = port;
         this.keepConnectionAlive = keepConnectionAlive;
+        this.logResponses = logResponses;
         
+        boolean correctImpl = false;
+        for (Class c : cd.getInterfaces()){
+            if (c.equals(IClientData.class))
+                correctImpl = true;
+        }
+                    
+        if (!correctImpl){
+            logError("Class " + cd.getSimpleName() + " is not an implementation of IClientData!");
+            logError("Exiting...");
+            return;
+        }
+        
+        log("[Server] Registering default responses...");
         registerDefaultResponses(cd);
+        log("[Server] Registering additional responses...");
         registerResponses();
         start();
         
-        if (keepConnectionAlive)
+        if (keepConnectionAlive){
+            log("[Server] Starting ping thread...");
             startPingThread();
+        }
     }
     
     /**
@@ -87,8 +86,8 @@ public abstract class Server {
      * @param port The port to run the server on
      * @param cd The implementation for data kept on the Server
      */
-    public Server(int port, IClientData cd){
-        this(port, DEFAULT_KEEP_ALIVE, cd);
+    public Server(int port, Class cd){
+        this(port, DEFAULT_KEEP_ALIVE, DEFAULT_LOG_RESPONSES, cd);
     }
     
     /**
@@ -97,7 +96,17 @@ public abstract class Server {
      * @param keepConnectionAlive Flag for sending periodic pings to connected clients
      */
     public Server(int port, boolean keepConnectionAlive){
-        this(port, keepConnectionAlive, new DefaultClientDataImpl());
+        this(port, keepConnectionAlive, DEFAULT_LOG_RESPONSES, DefaultClientDataImpl.class);
+    }
+    
+    /**
+     *
+     * @param port
+     * @param keepConnectionAlive
+     * @param cd
+     */
+    public Server(int port, boolean keepConnectionAlive, Class cd){
+        this(port, DEFAULT_KEEP_ALIVE, DEFAULT_LOG_RESPONSES, cd);
     }
     
     /**
@@ -105,7 +114,7 @@ public abstract class Server {
      * @param port The port to run the server on
      */
     public Server(int port){
-        this(port, DEFAULT_KEEP_ALIVE, new DefaultClientDataImpl());
+        this(port, DEFAULT_KEEP_ALIVE, DEFAULT_LOG_RESPONSES, DefaultClientDataImpl.class);
     }
     
     /**
@@ -121,11 +130,16 @@ public abstract class Server {
      * flag is not set and 'PONG' is defined.
      * @param cd The ClientData implementation
      */
-    protected void registerDefaultResponses(IClientData cd){
+    private void registerDefaultResponses(Class cd){
         responses.put("REGISTER_CLIENT", new Response(){
             @Override
             public void run(Data data, Socket socket) {
-                connectedClients.add(new RemoteClient((String) data.getSenderID(), socket, cd));
+                try {
+                    connectedClients.add(new RemoteClient((String) data.getSenderID(), socket, (IClientData) cd.newInstance()));
+                } catch (InstantiationException | IllegalAccessException ex) {
+                    logError(ex.getMessage());
+                    return;
+                } 
                 // This code is kinda awful but I can't think of a better
                 // solution rn so I'll leave it as is
                 for (RemoteClient c : connectedClients){
@@ -134,6 +148,61 @@ public abstract class Server {
                     }
                 }
                 onClientRegistered(data, socket);
+            }
+        });
+        
+        responses.put("SET_CLIENT_TAGS", new Response(){
+            @Override
+            public void run(Data data, Socket socket) {
+                data.remove(0);
+                for (RemoteClient c : connectedClients){
+                    if (c.getId().equalsIgnoreCase(data.getSenderID())){
+                        c.getClientData().getClientTags().clear();
+                        ArrayList<String> temp = new ArrayList<>();
+                        for (Object s : data){
+                            temp.add((String) s);
+                        }
+                        log("[Server] Setting client tags " + temp.toString() + " for client: " + c.getId());
+                        c.getClientData().setClientTags(temp);
+                        onTagsSet(c);
+                    }
+                }
+            }
+        });
+        
+        responses.put("ADD_CLIENT_TAGS", new Response(){
+            @Override
+            public void run(Data data, Socket socket) {
+                data.remove(0);
+                for (RemoteClient c : connectedClients){
+                    if (c.getId().equalsIgnoreCase(data.getSenderID())){
+                        ArrayList<String> temp = new ArrayList<>();
+                        for (Object s : data){
+                            temp.add((String) s);
+                        }
+                        log("[Server] Adding client tags " + temp.toString() + " for client: " + c.getId());
+                        c.getClientData().setClientTags(temp);
+                        onTagsAdded(c);
+                    }
+                }
+            }
+        });
+        
+        responses.put("REMOVE_CLIENT_TAGS", new Response(){
+            @Override
+            public void run(Data data, Socket socket) {
+                data.remove(0);
+                for (RemoteClient c : connectedClients){
+                    if (c.getId().equalsIgnoreCase(data.getSenderID())){
+                        ArrayList<String> temp = new ArrayList<>();
+                        for (Object s : data){
+                            temp.remove((String) s);
+                        }
+                        log("[Server] Removing client tags " + temp.toString() + " for client: " + c.getId());
+                        c.getClientData().setClientTags(temp);
+                        onTagsRemoved(c);
+                    }
+                }
             }
         });
         
@@ -172,12 +241,14 @@ public abstract class Server {
      * @param response The action that occurs upon receiving the response
      */
     public void registerResponse(String identifier, Response response){
-        if (identifier.equalsIgnoreCase("REGISTER_CLIENT"))
-            throw new IllegalArgumentException("Identifier can not be 'REGISTER_CLIENT'.");
-        if (identifier.equalsIgnoreCase("LOGOUT"))
-            throw new IllegalArgumentException("Identifier can not be 'LOGOUT'.");
-        if (identifier.equalsIgnoreCase("PONG") && keepConnectionAlive)
-            throw new IllegalArgumentException("Identifier can not be 'PONG'.");
+        for (String s : responses.keySet()){
+            if (identifier.equalsIgnoreCase(s)){
+                if (identifier.equalsIgnoreCase("PONG") && !keepConnectionAlive)
+                    break;
+                throw new IllegalArgumentException("Identifier can not be " 
+                        + s + ". Already regsitered.");
+            }
+        } 
         
         responses.put(identifier, response);
     }
@@ -192,7 +263,6 @@ public abstract class Server {
                 public void run(){
                     while (!Thread.interrupted() && !stopped && server != null){
                         try {
-
                             Socket clientSocket = server.accept();
                            
                             ObjectInputStream in = new ObjectInputStream(
@@ -204,9 +274,10 @@ public abstract class Server {
                                
                                 for (String s : responses.keySet()){
                                     if (message.id().equalsIgnoreCase(s)) {
-                                        // avoiding the log being spammed with ping requests
-                                        if (!message.id().equalsIgnoreCase("PONG"))
-                                            log("[Server] Responding to client " + message.getSenderID() + " request " + message.id());
+                                        // avoiding the log being spammed with ping requests/responses
+                                        if (!message.id().equalsIgnoreCase("PONG") && logResponses)
+                                            log("[Server] Responding to client " 
+                                                    + message.getSenderID() + " request " + message.id());
                                         startRequestHandler(s, message, clientSocket);
                                         break;
                                     }
@@ -256,12 +327,14 @@ public abstract class Server {
         stopped = false;
         server = null;
         
+        log("[Server] Attempting to open socket...");
         try {
             server = new ServerSocket(port);
         } catch (IOException e) {
             logError("Error opening ServerSocket: " + e.getMessage());
         }
         
+        log("[Server] Starting Server...");
         startListener();
     }
     
@@ -376,6 +449,50 @@ public abstract class Server {
     }
     
     /**
+     * Sends a message to one/multiple clients based on how many have the given
+     * tags.
+     * @param data The message to be sent
+     * @param tag The tag to send the message to
+     * @param tags Varargs for multiple tags
+     * @return
+     */
+    public synchronized int sendMessageToTaggedClients(Data data, String tag, String... tags){
+        int received = 0;
+        ArrayList<RemoteClient> messageQueue = new ArrayList<>();
+        ArrayList<String> tagsToAdd = new ArrayList<>();
+        
+        tagsToAdd.add(tag);
+        if (tags != null)
+            for (String s : tags) {
+                tagsToAdd.add(s);
+            }
+        
+        // likely a far more efficient way to do this
+        // luckily I'm not looking for efficiency so this will do
+        for (RemoteClient client : connectedClients){
+            if (!messageQueue.contains(client)) {
+                for (String s : tagsToAdd){
+                    if (client.getClientData().getClientTags().contains(s)){
+                        messageQueue.add(client);
+                    }
+                }
+            }
+        }
+        
+        for (RemoteClient client : messageQueue){
+            sendMessage(client, data);
+            received++;
+        }
+        
+        if(clientCleanupQueue.size() > 0) {
+            received -= clientCleanupQueue.size();
+            cleanupClients();
+        }
+        
+        return received;
+    }
+    
+    /**
      * Cleanup clients that are marked for deletion from the connected clients
      * list. Don't call this while connectedClients list is being iterated on.
      */
@@ -386,7 +503,7 @@ public abstract class Server {
                 connectedClients.remove(client);
                 onClientRemoved(client);
             }
-            clientCleanupQueue.clear();
+        clientCleanupQueue.clear();
     }
     
     /**
@@ -400,6 +517,27 @@ public abstract class Server {
         }
         
         return num;
+    }
+    
+    /**
+     * Helper function to easily set a client's tags
+     * @param clientID The client to set tags for
+     * @param tag The tag to set
+     * @param tags Varargs for multiple tags
+     */
+    public synchronized void setClientTags(String clientID, String tag, String... tags){
+        for (RemoteClient client : connectedClients){
+            if (client.getId().equalsIgnoreCase(clientID)) {
+                ArrayList<String> temp = new ArrayList<>();
+                temp.add(tag);
+                if (tags != null)
+                    for (String t : tags){
+                        temp.add(t);
+                    }
+                client.getClientData().setClientTags(temp);
+                onTagsSet(client);
+            }
+        }
     }
     
     /**
@@ -423,7 +561,7 @@ public abstract class Server {
      * It's just System.out.println();
      * @param message
      */
-    public void log(String message){
+    public static void log(String message){
         System.out.println(message);
     }
 
@@ -431,7 +569,7 @@ public abstract class Server {
      * It's just System.err.println();
      * @param message
      */
-    public void logError(String message){
+    public static void logError(String message){
         System.err.println(message);
     }
     
@@ -475,6 +613,30 @@ public abstract class Server {
      * Called when a client logs out, override this method to add functionality.
      */
     public void onClientLogout(){
+        
+    }
+    
+    /**
+     * Called when a client's tag is set, override this method to add functionality.
+     * @param client The client who's tag was set
+     */
+    public void onTagsSet(RemoteClient client){
+        
+    }
+    
+    /**
+     * Called when a client has tags added, override this method to add functionality.
+     * @param client The client who had tags added
+     */
+    public void onTagsAdded(RemoteClient client){
+        
+    }
+    
+    /**
+     * Called when a client's tags are removed, override this method to add functionality.
+     * @param client The client who had tags removed
+     */
+    public void onTagsRemoved(RemoteClient client){
         
     }
     
